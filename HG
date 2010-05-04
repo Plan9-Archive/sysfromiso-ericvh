@@ -1,0 +1,14 @@
+#!/bin/rc
+hget http://plan9.bell-labs.com/plan9/download/plan9.iso.bz2>/tmp/iso.bz2
+rc -c 'cd /tmp; bunzip2 iso.bz2'
+9660srv -f /tmp/iso iso
+mount /srv/iso /n/iso
+cd sysfromiso
+bind -b /n/iso .
+#hg clone -e '/bin/openssh/ssh -2' ssh://hg@bitbucket.org/rminnich/sysfromiso
+x=`date`
+hg commit -m '$x'
+ape/psh<<EOF
+hg push -e  '/bin/openssh/ssh -2' 
+EOF
+
