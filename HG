@@ -7,7 +7,7 @@ cd sysfromiso
 bind -b /n/iso .
 #hg clone -e '/bin/openssh/ssh -2' ssh://hg@bitbucket.org/rminnich/sysfromiso
 x=`{date}
-hg commit -m '$x'
+hg commit -m $"x
 ape/psh<<EOF
 hg push -e  '/bin/openssh/ssh -2' 
 EOF
