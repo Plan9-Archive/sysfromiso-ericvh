@@ -3,7 +3,6 @@
 #include "mem.h"
 #include "dat.h"
 #include "fns.h"
-#include "io.h"
 
 #include "arm.h"
 
@@ -26,7 +25,10 @@ mmudump(PTE *l1)
 	uvlong va, endva;
 	PTE pte;
 
-	iprint("\n");
+//	pa -= MACHSIZE+1024;	/* put level 2 entries below level 1 */
+//	l2 = KADDR(pa);
+
+	print("\n");
 	endva = startva = startpa = 0;
 	rngtype = 0;
 	/* dump first level of ptes */
@@ -36,7 +38,7 @@ mmudump(PTE *l1)
 		type = pte & (Fine|Section|Coarse);
 		if (ISHOLE(pte)) {
 			if (endva != 0) {	/* open range? close it */
-				iprint("l1 maps va (%#lux-%#llux) -> pa %#lux type %#ux\n",
+				print("l1 maps va (%#lux-%#llux) -> pa %#lux type %#ux\n",
 					startva, endva-1, startpa, rngtype);
 				endva = 0;
 			}
@@ -47,12 +49,23 @@ mmudump(PTE *l1)
 				rngtype = type;
 			}
 			endva = va + MB;	/* continue the open range */
+//			if (type == Coarse) {
+//				// could dump the l2 table for this l1 entry
+//			}
 		}
 		va += MB;
 	}
 	if (endva != 0)			/* close an open range */
-		iprint("l1 maps va (%#lux-%#llux) -> pa %#lux type %#ux\n",
+		print("l1 maps va (%#lux-%#llux) -> pa %#lux type %#ux\n",
 			startva, endva-1, startpa, rngtype);
+}
+
+/* identity map the megabyte containing va, uncached */
+static void
+idmap(PTE *l1, ulong va)
+{
+	va &= ~(MB-1);
+	l1[L1X(va)] = va | Dom0 | L1AP(Krw) | Section;
 }
 
 /* identity map `mbs' megabytes from phys */
@@ -60,15 +73,11 @@ void
 mmuidmap(uintptr phys, int mbs)
 {
 	PTE *l1;
-	uintptr pa, fpa;
+	uintptr fpa;
 
-	pa = ttbget();
-	l1 = KADDR(pa);
-
+	l1 = KADDR(ttbget());
 	for (fpa = phys; mbs-- > 0; fpa += MiB)
-		l1[L1X(fpa)] = fpa|Dom0|L1AP(Krw)|Section;
-	coherence();
-
+		idmap(l1, fpa);
 	mmuinvalidate();
 	cacheuwbinv();
 	l2cacheuwbinv();
@@ -77,39 +86,32 @@ mmuidmap(uintptr phys, int mbs)
 void
 mmuinit(void)
 {
+//	int i;
+	uintptr pa;
 	PTE *l1, *l2;
-	uintptr pa, i;
 
 	pa = ttbget();
 	l1 = KADDR(pa);
 
-	/*
-	 * map high vectors to start of dram, but only 4K, not 1MB.
-	 */
+	/* redundant with l.s; only covers first MB of 17MB */
+	l1[L1X(VIRTIO)] = PHYSIO|Dom0|L1AP(Krw)|Section;
+
+	idmap(l1, PHYSETHER);		/* igep 9221 ethernet regs */
+	idmap(l1, PHYSL4PROT);
+	idmap(l1, PHYSL3);
+	idmap(l1, PHYSSMS);
+	idmap(l1, PHYSDRC);
+	idmap(l1, PHYSGPMC);
+//	for (i = 0; i < 16; i++)	/* just need 16MB */
+//		idmap(l1, PHYSNAND + i*MB);
+
+	/* map high vectors to start of dram, but only 4K, not 1MB */
 	pa -= MACHSIZE+2*1024;
 	l2 = KADDR(pa);
 	memset(l2, 0, 1024);
 	/* vectors step on u-boot, but so do page tables */
 	l2[L2X(HVECTORS)] = PHYSDRAM|L2AP(Krw)|Small;
 	l1[L1X(HVECTORS)] = pa|Dom0|Coarse;	/* vectors -> ttb-machsize-2k */
-
-	/* double map vectors at virtual 0 so reset will see them */
-	pa -= 1024;
-	l2 = KADDR(pa);
-	memset(l2, 0, 1024);
-	l2[L2X(0)] = PHYSDRAM|L2AP(Krw)|Small;
-	l1[L1X(0)] = pa|Dom0|Coarse;
-
-	/*
-	 * set up L2 ptes for PHYSIO (i/o registers), with smaller pages to
-	 * enable user-mode access to a few devices.
-	 */
-	pa -= 1024;
-	l2 = KADDR(pa);
-	/* identity map by default */
-	for (i = 0; i < 1024/4; i++)
-		l2[L2X(VIRTIO + i*BY2PG)] = (PHYSIO + i*BY2PG)|L2AP(Krw)|Small;
-	l1[L1X(VIRTIO)] = pa|Dom0|Coarse;
 	coherence();
 
 	mmuinvalidate();
@@ -117,7 +119,7 @@ mmuinit(void)
 	l2cacheuwbinv();
 
 	m->mmul1 = l1;
-//	mmudump(l1);			/* DEBUG.  too early to print */
+//	mmudump(l1);			/* DEBUG */
 }
 
 static void
@@ -142,7 +144,8 @@ mmul2empty(Proc* proc, int clear)
 static void
 mmul1empty(void)
 {
-#ifdef notdef			/* there's a bug in here */
+#ifdef notdef
+/* there's a bug in here */
 	PTE *l1;
 
 	/* clean out any user mappings still in l1 */
@@ -203,15 +206,12 @@ mmuswitch(Proc* proc)
 	/* make sure map is in memory */
 	/* could be smarter about how much? */
 	cachedwbse(&l1[L1X(UZERO)], (L1hi - L1lo)*sizeof(PTE));
-	l2cacheuwbse(&l1[L1X(UZERO)], (L1hi - L1lo)*sizeof(PTE));
 
 	/* lose any possible stale tlb entries */
 	mmuinvalidate();
 
-//	mmudump(l1);
 	//print("mmuswitch l1lo %d l1hi %d %d\n",
 	//	m->mmul1lo, m->mmul1hi, proc->kp);
-//print("\n");
 }
 
 void
@@ -249,7 +249,6 @@ mmurelease(Proc* proc)
 	/* make sure map is in memory */
 	/* could be smarter about how much? */
 	cachedwbse(&m->mmul1[L1X(UZERO)], (L1hi - L1lo)*sizeof(PTE));
-	l2cacheuwbse(&m->mmul1[L1X(UZERO)], (L1hi - L1lo)*sizeof(PTE));
 
 	/* lose any possible stale tlb entries */
 	mmuinvalidate();
@@ -285,11 +284,9 @@ putmmu(uintptr va, uintptr pa, Page* page)
 
 		/* force l2 page to memory */
 		cachedwbse((void *)pg->va, BY2PG);
-		l2cacheuwbse((void *)pg->va, BY2PG);
 
 		*l1 = PPN(pg->pa)|Dom0|Coarse;
 		cachedwbse(l1, sizeof *l1);
-		l2cacheuwbse(l1, sizeof *l1);
 		//print("l1 %#p *l1 %#ux x %d pid %d\n", l1, *l1, x, up->pid);
 
 		if(x >= m->mmul1lo && x < m->mmul1hi){
@@ -300,7 +297,7 @@ putmmu(uintptr va, uintptr pa, Page* page)
 		}
 	}
 	pte = UINT2PTR(KADDR(PPN(*l1)));
-	//print("pte %#p index %ld %#ux\n", pte, L2X(va), *(pte+L2X(va)));
+	//print("pte %#p index %ld was %#ux\n", pte, L2X(va), *(pte+L2X(va)));
 
 	/* protection bits are
 	 *	PTERONLY|PTEVALID;
@@ -316,16 +313,14 @@ putmmu(uintptr va, uintptr pa, Page* page)
 		x |= L2AP(Uro);
 	pte[L2X(va)] = PPN(pa)|x;
 	cachedwbse(&pte[L2X(va)], sizeof pte[0]);
-	l2cacheuwbse(&pte[L2X(va)], sizeof pte[0]);
 
 	/* clear out the current entry */
 	mmuinvalidateaddr(PPN(va));
 
-	/*
-	 *  write back dirty entries - we need this because pio() in
+	/*  write back dirty entries - we need this because the pio() in
 	 *  fault.c is writing via a different virt addr and won't clean
 	 *  its changes out of the dcache.  Page coloring doesn't work
-	 *  on this mmu because the l1 virtual cache is set associative
+	 *  on this mmu because the virtual cache is set associative
 	 *  rather than direct mapped.
 	 */
 	cachedwbinv();
@@ -358,8 +353,7 @@ mmuuncache(void* v, usize size)
 		return nil;
 	*pte &= ~(Cached|Buffered);
 	mmuinvalidateaddr(va);
-	cachedwbse(pte, 4);
-	l2cacheuwbse(pte, 4);
+	cachedwbinvse(pte, 4);
 
 	return v;
 }
@@ -381,8 +375,7 @@ mmukmap(uintptr va, uintptr pa, usize size)
 		return 0;
 	*pte = pa|Dom0|L1AP(Krw)|Section;
 	mmuinvalidateaddr(va);
-	cachedwbse(pte, 4);
-	l2cacheuwbse(pte, 4);
+	cachedwbinvse(pte, 4);
 
 	return va;
 }
@@ -404,8 +397,7 @@ mmukunmap(uintptr va, uintptr pa, usize size)
 		return 0;
 	*pte = Fault;
 	mmuinvalidateaddr(va);
-	cachedwbse(pte, 4);
-	l2cacheuwbse(pte, 4);
+	cachedwbinvse(pte, 4);
 
 	return va;
 }
@@ -417,8 +409,8 @@ mmukunmap(uintptr va, uintptr pa, usize size)
 uintptr
 cankaddr(uintptr pa)
 {
-	if(pa < PHYSDRAM + 512*MiB)		/* assumes PHYSDRAM is 0 */
-		return PHYSDRAM + 512*MiB - pa;
+	if(pa >= PHYSDRAM && pa < PHYSDRAM+memsize)
+		return PHYSDRAM+memsize - pa;
 	return 0;
 }
 

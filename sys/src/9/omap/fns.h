@@ -8,16 +8,11 @@ extern void ledexit(int);
 extern void delay(int);
 extern void _uartputs(char*, int);
 extern int _uartprint(char*, ...);
-extern void uartkirkwoodconsole(void);
-extern void serialputs(char *, int);
-extern void serialputc(int c);
 
 #pragma	varargck argpos	_uartprint 1
 
 extern void archreboot(void);
-extern void archconfinit(void);
 extern void archreset(void);
-extern void barriers(void);
 extern void cachedinv(void);
 extern void cachedinvse(void*, int);
 extern void cachedwb(void);
@@ -25,18 +20,17 @@ extern void cachedwbinv(void);
 extern void cachedwbinvse(void*, int);
 extern void cachedwbse(void*, int);
 extern void cacheiinv(void);
+extern void cacheinfo(int level, Memcache *cp);
 extern void cacheuwbinv(void);
 extern uintptr cankaddr(uintptr pa);
+extern void chkmissing(void);
 extern void clockshutdown(void);
 extern int clz(ulong);
-int	cmpswap(long*, long, long);
-
-#define coherence barriers
-
+extern int cmpswap(long*, long, long);
+extern void coherence(void);
 extern u32int controlget(void);
 extern u32int cpctget(void);
 extern u32int cpidget(void);
-extern char *cputype2name(char *, int);
 extern ulong cprd(int cp, int op1, int crn, int crm, int op2);
 extern ulong cprdsc(int op1, int crn, int crm, int op2);
 extern void cpuidprint(void);
@@ -45,56 +39,66 @@ extern void cpwrsc(int op1, int crn, int crm, int op2, ulong val);
 #define cycles(ip) *(ip) = lcycles()
 extern u32int dacget(void);
 extern void dacput(u32int);
+extern void dmainit(void);
+extern int dmastart(void *, int, void *, int, uint, Rendez *, int *);
+extern void dmatest(void);
 extern u32int farget(void);
+extern ulong fprd(int fpreg);
+extern void fpwr(int fpreg, ulong val);
 extern u32int fsrget(void);
-extern void l1cachesoff(void);
-extern void l1cacheson(void);
-extern void l2cachecfgoff(void);
-extern void l2cachecfgon(void);
-extern void l2cacheon(void);
+extern u32int getscr(void);
+extern u32int getpsr(void);
+extern ulong getwayssets(void);
+extern void intrsoff(void);
+extern int isaconfig(char*, int, ISAConf*);
+extern int isdmadone(int);
+extern int ispow2(uvlong);
 extern void l2cacheuinv(void);
-extern void l2cacheuinvse(void*, int);
 extern void l2cacheuwb(void);
 extern void l2cacheuwbinv(void);
-extern void l2cacheuwbinvse(void*, int);
-extern void l2cacheuwbse(void*, int);
 extern void lastresortprint(char *buf, long bp);
 extern int log2(ulong);
+extern void machinit(void);
 extern void mmuinvalidate(void);		/* 'mmu' or 'tlb'? */
 extern void mmuinvalidateaddr(u32int);		/* 'mmu' or 'tlb'? */
 extern u32int pidget(void);
 extern void pidput(u32int);
-void	procrestore(Proc *);
-void	procsave(Proc*);
-void	procsetup(Proc*);
+extern vlong probeaddr(uintptr);
+extern void procrestore(Proc *);
+extern void procsave(Proc*);
+extern void procsetup(Proc*);
 extern void _reset(void);
+extern void serialputs(char* s, int n);
+extern void setcachelvl(int);
 extern void setr13(int, u32int*);
 #define tas _tas
 extern int _tas(void *);
 extern u32int ttbget(void);
 extern void ttbput(u32int);
+extern void watchdoginit(void);
 
-Dev*		devtabget(int, int);
-void		devtabinit(void);
-void		devtabreset(void);
-long		devtabread(Chan*, void*, long, vlong);
-void		devtabshutdown(void);
-
-extern void intrclear(int sort, int v);
-extern void intrenable(int sort, int v, void (*f)(Ureg*, void*), void *a, char *name);
-extern void intrdisable(int sort, int v, void (*f)(Ureg*, void*), void* a, char *name);
+extern int irqenable(int, void (*)(Ureg*, void*), void*, char*);
+extern int irqdisable(int, void (*)(Ureg*, void*), void*, char*);
+#define intrenable(i, f, a, b, n)	irqenable((i), (f), (a), (n))
+#define intrdisable(i, f, a, b, n)	irqdisable((i), (f), (a), (n))
 extern void vectors(void);
 extern void vtable(void);
+
+/* dregs, going away */
+extern int inb(int);
+extern void outb(int, int);
 
 /*
  * Things called in main.
  */
+extern void archconfinit(void);
 extern void clockinit(void);
 extern void i8250console(void);
 extern void links(void);
 extern void mmuinit(void);
 extern void touser(uintptr);
 extern void trapinit(void);
+
 
 extern int fpiarm(Ureg*);
 extern int fpudevprocio(Proc*, void*, long, uintptr, int);
@@ -117,8 +121,10 @@ uintptr mmukmap(uintptr, uintptr, usize);
 uintptr mmukunmap(uintptr, uintptr, usize);
 extern void* mmuuncache(void*, usize);
 extern void* ucalloc(usize);
+extern Block* ucallocb(int);
 extern void* ucallocalign(usize size, int align, int span);
 extern void ucfree(void*);
+extern void ucfreeb(Block*);
 
 /*
  * Things called from port.
@@ -129,36 +135,13 @@ extern void microdelay(int);			/* only edf.c */
 extern void evenaddr(uintptr);
 extern void idlehands(void);
 extern void setkernur(Ureg*, Proc*);		/* only devproc.c */
-extern void spldone(void);
-extern int splfhi(void);
-extern int splflo(void);
+extern void* sysexecregs(uintptr, ulong, int);
 extern void sysprocsetup(Proc*);
 
 /*
- * PCI
+ * PCI stuff.
  */
-ulong	pcibarsize(Pcidev*, int);
-void	pcibussize(Pcidev*, ulong*, ulong*);
-int	pcicfgr8(Pcidev*, int);
-int	pcicfgr16(Pcidev*, int);
-int	pcicfgr32(Pcidev*, int);
-void	pcicfgw8(Pcidev*, int, int);
-void	pcicfgw16(Pcidev*, int, int);
-void	pcicfgw32(Pcidev*, int, int);
-void	pciclrbme(Pcidev*);
-void	pciclrioe(Pcidev*);
-void	pciclrmwi(Pcidev*);
-int	pcigetpms(Pcidev*);
-void	pcihinv(Pcidev*);
-uchar	pciipin(Pcidev*, uchar);
-Pcidev* pcimatch(Pcidev*, int, int);
-Pcidev* pcimatchtbdf(int);
-void	pcireset(void);
-int	pciscan(int, Pcidev**);
-void	pcisetbme(Pcidev*);
-void	pcisetioe(Pcidev*);
-void	pcisetmwi(Pcidev*);
-int	pcisetpms(Pcidev*, int);
+
 int	cas32(void*, u32int, u32int);
 int	tas32(void*);
 
@@ -182,23 +165,9 @@ extern void kexit(Ureg*);
 
 #define	waserror()	(up->nerrlab++, setlabel(&up->errlab[up->nerrlab-1]))
 
-/*
- * this low-level printing stuff is ugly,
- * but there appears to be no other way to
- * print until after #t is populated.
- */
-#define wave(c) { \
-	coherence(); \
-	while ((*(ulong *)(PHYSCONS+4*5) & (1<<5)) == 0) /* (x->lsr&LSRthre)==0? */ \
-		; \
-	*(ulong *)PHYSCONS = (c); \
-	coherence(); \
-}
+#define KADDR(pa)	UINT2PTR(KZERO    | ((uintptr)(pa) & ~KSEGM))
+#define PADDR(va)	PTR2UINT(PHYSDRAM | ((uintptr)(va) & ~KSEGM))
 
-/*
- * These are not good enough.
- */
-#define KADDR(pa)	UINT2PTR(KZERO|((uintptr)(pa)))
-#define PADDR(va)	PTR2UINT(((uintptr)(va)) & ~KSEGM)
+#define wave(c) *(ulong *)PHYSCONS = (c)
 
 #define MASK(v)	((1UL << (v)) - 1)	/* mask `v' bits wide */
