@@ -1,0 +1,3 @@
+#!/bin/rc
+hg add acme rc/bin rc/lib sys/include sys/src
+

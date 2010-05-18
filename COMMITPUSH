@@ -1,0 +1,7 @@
+#!/bin/rc
+x=`{date}
+hg commit -m $"x
+ape/psh<<EOF
+hg push -e  '/bin/openssh/ssh -2' 
+EOF
+rm /srv/iso /tmp/iso /tmp/iso.bz2
