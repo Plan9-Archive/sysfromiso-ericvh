@@ -5,6 +5,7 @@ hget -v http://plan9.bell-labs.com/plan9/download/plan9.iso.bz2>/tmp/iso.bz2 |[2
 rc -c 'cd /tmp; bunzip2 iso.bz2'
 9660srv -f /tmp/iso iso
 mount /srv/iso /n/iso
+bind -ac . .
 bind -b /n/iso .
 x=`{date}
 hg commit -m $"x
