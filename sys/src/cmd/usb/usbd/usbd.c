@@ -457,6 +457,9 @@ portdetach(Hub *h, int p)
 		closehub(pp->hub);
 		pp->hub = nil;
 	}
+	if(pp->devmaskp != nil)
+		putdevnb(pp->devmaskp, pp->devnb);
+	pp->devmaskp = nil;
 	if(pp->dev != nil){
 		devctl(pp->dev, "detach");
 		usbfsgone(pp->dev->dir);
@@ -647,7 +650,7 @@ work(void *a)
 		dprint(2, "%s: %s starting\n", argv0, fn);
 		h = newhub(fn, nil);
 		if(h == nil)
-			fprint(2, "%s: %s: %r\n", argv0, fn);
+			fprint(2, "%s: %s: newhub failed: %r\n", argv0, fn);
 		free(fn);
 	}
 	/*
@@ -661,7 +664,7 @@ work(void *a)
 	 * have to poll the root hub(s) in any case.
 	 */
 	for(;;){
-	Again:
+Again:
 		for(h = hubs; h != nil; h = h->next)
 			for(i = 1; i <= h->nport; i++)
 				if(enumhub(h, i) < 0){
@@ -676,7 +679,6 @@ work(void *a)
 		if(mustdump)
 			dump();
 	}
-
 }
 
 static int
