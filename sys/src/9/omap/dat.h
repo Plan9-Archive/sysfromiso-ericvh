@@ -1,6 +1,3 @@
-#define LASTRESORT lastresortprint	/* for ./devcons.c */
-#define CRUDEPRINT serialputs		/* for ./devcons.c */
-
 /*
  * Time.
  *
@@ -114,6 +111,7 @@ struct Conf
 	int	nswppo;		/* max # of pageouts per segment pass */
 	ulong	hz;		/* processor cycle freq */
 	ulong	mhz;
+	int	monitor;	/* flag */
 };
 
 /*
@@ -220,6 +218,7 @@ extern register Proc* up;			/* R9 */
 extern uintptr kseg0;
 extern Mach* machaddr[MAXMACH];
 extern ulong memsize;
+extern int normalprint;
 
 /*
  *  a parsed plan9.ini line
@@ -259,7 +258,7 @@ extern char dbgflg[256];
  *  hardware info about a device
  */
 typedef struct {
-	ulong	port;	
+	ulong	port;
 	int	size;
 } Devport;
 

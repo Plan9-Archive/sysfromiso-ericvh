@@ -157,7 +157,17 @@ char **ini;
 
 int scsi0port;
 char *defaultpartition;
-int biosload;			/* is it safe to probe the bios? */
+
+/*
+ * Is it safe to probe the bios?
+ *
+ * Empirically, we can't touch any disks natively (not through the
+ * bios) if we want to read them through the bios.  So we have to
+ * choose bios (usb) loading or everything-else loading.
+ */
+int biosload;
+int askbiosload;
+
 int iniread;
 int debugload;
 int vga;
@@ -332,6 +342,14 @@ main(void)
 		/* TODO turning off debug and debugload makes loading fail */
 		debug = 1;
 
+	/* this is too early for the non-soekris serial console, alas */
+	if (askbiosload) {
+		line[0] = '\0';
+		getstr("use bios drivers (e.g., for usb)", line, sizeof line,
+			"no", 60);
+		biosload = strncmp(line, "yes", 3) == 0;
+	}
+
 	/*
 	 * find and read plan9.ini, setting configuration variables.
 	 */
@@ -342,8 +360,7 @@ main(void)
 		 * we don't know which ether interface to use nor
 		 * whether bios loading is disabled until we have read
 		 * plan9.ini.  make an exception for 9pxeload: probe
-		 * ethers anyway.  see if we can live with always
-		 * probing the bios.
+		 * ethers anyway.
 		 */
 		if(!pxe && tp->type == Tether /*|| !vga && tp->type == Tbios */)
 			continue;
@@ -370,8 +387,11 @@ main(void)
 	if (!pxe)
 		debug = 0;		/* stop the flood of output */
 	debugload = getconf("*debugload") != nil;
-	/* hack for soekris-like machines */
-	if(!vga || getconf("*nobiosload") != nil)
+	/*
+	 * !vga is a hack for soekris-like machines.
+	 * 9pxeload can't use bios int 13 calls; they wedge the machine.
+	 */
+	if(!vga || pxe || getconf("*nobiosload") != nil)
 		biosload = 0;
 	if((p = getconf("console")) != nil)
 		consinit(p, getconf("baud"));
@@ -379,6 +399,7 @@ main(void)
 	prcpuid();
 	readlsconf();
 	apminit();
+	print("bios (usb) loading %s\n", biosload? "enabled": "disabled");
 
 	devpccardlink();
 	devi82365link();
@@ -395,7 +416,6 @@ main(void)
 	mode = Mauto;
 
 	p = getconf("bootfile");
-
 	if(p != 0) {
 		mode = Manual;
 		for(i = 0; i < NMode; i++){
@@ -427,7 +447,7 @@ done:
 		print("end final probe\n");
 
 	if(p = getconf("bootdef"))
-		strcpy(def, p);
+		strncpy(def, p, sizeof def);
 
 	/* print possible boot methods */
 	flag = 0;

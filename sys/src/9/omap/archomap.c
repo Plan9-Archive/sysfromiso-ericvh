@@ -186,7 +186,7 @@ enum {
 	Pergpio3	= 1 << 14,
 	Pergpio2	= 1 << 13,
 	Perwdt3		= 1 << 12,	/* wdt3 clock enable bit for periphs */
-	Peruart3	= 1 << 11,
+	Peruart3	= 1 << 11,	/* console uart */
 	Pergpt9		= 1 << 10,
 	Pergpt8		= 1 << 9,
 	Pergpt7		= 1 << 8,
@@ -195,6 +195,8 @@ enum {
 	Pergpt4		= 1 << 5,
 	Pergpt3		= 1 << 4,
 	Pergpt2		= 1 << 3,	/* gpt2 clock enable bit for periphs */
+
+	Perenable	= Pergpio6 | Pergpio5 | Perwdt3 | Pergpt2 | Peruart3,
 
 	Usbhost2	= 1 << 1,	/* 120MHz clock enable */
 	Usbhost1	= 1 << 0,	/* 48MHz clock enable */
@@ -558,12 +560,15 @@ configper(void)
 
 	per->clksel[0] &= ~MASK(8);	/* select 32kHz clock for GPTIMER2-9 */
 
-	per->iclken |= Pergpio6 | Pergpio5 | Perwdt3 | Pergpt2;
+	per->iclken |= Perenable;
 	coherence();
-	per->fclken |= Pergpio6 | Pergpio5 | Perwdt3 | Pergpt2;
+	per->fclken |= Perenable;
 	coherence();
-	while (per->idlest & (Pergpio6 | Pergpio5 | Perwdt3 | Pergpt2))
+	while (per->idlest & Perenable)
 		;
+
+	per->autoidle = 0;
+	coherence();
 }
 
 static void
@@ -756,6 +761,46 @@ configgpio(void)
 	coherence();
 }
 
+enum {
+	/* idlest bits */
+	Gpioidle= 1 << 3,
+	Dssidle	= 1 << 1,
+};
+
+void
+configscreengpio(void)
+{
+	Cm *wkup = (Cm *)PHYSSCMWKUP;
+	Gpio *gpio = (Gpio *)PHYSGPIO1;
+
+	/* no clocksel needed */
+	wkup->fclken |= B(3);			/* turn gpioclock on */
+	wkup->iclken |= B(3);
+//	wkup->autoidle |= B(3); 		/* gpio clock set it on auto */
+	coherence();
+	while (wkup->idlest & Gpioidle)
+		;
+	/* should use a UNMASK macro? */
+	gpio->oe |= ~0 ^ B(24) ^ B(8) ^ B(5);	/* enable output*/
+	gpio->dataout |= B(24) | B(8) | B(5);	/* set output pins */
+	coherence();
+	delay(50);
+}
+
+void
+screenclockson(void)
+{
+	Cm *dsscm = (Cm *)PHYSSCMDSS;
+
+	dsscm->clksel[0] = B(12) | 2;		/* DPLL4 */
+	dsscm->fclken = B(2) | B(1) | B(0);  /* turn on clocks for tv, dss2/1 */
+	dsscm->iclken |= B(0);			/* turn on dss clock */
+	coherence();
+	delay(50);
+	while (dsscm->idlest & Dssidle)
+		;
+}
+
 void
 gpioirqclr(void)
 {
@@ -891,6 +936,8 @@ subarch(int impl, uint sa)
  *	4	pulltypeselect
  *	3	pulludenable
  *	2-0	muxmode
+ *
+ * see table 7-5 in §7.4.4.3 of spruf98d
  */
 
 enum {
@@ -958,10 +1005,11 @@ setmuxmode(ulong addr, int shorts, int mode)
 	int omode;
 	ushort *ptr;
 
+	mode &= Muxmode;
 	for (ptr = (ushort *)addr; shorts-- > 0; ptr++) {
 		omode = *ptr & Muxmode;
 		if (omode != mode)
-			*ptr = *ptr & ~Muxmode | mode & Muxmode;
+			*ptr = *ptr & ~Muxmode | mode;
 	}
 	coherence();
 }
@@ -972,22 +1020,28 @@ setpadmodes(void)
 	int off;
 
 	/* set scm pad modes for usb; hasn't made any difference yet */
-	setmuxmode(0x48002166, 7, 5);	/* hsusb3_tll; is mode 4 */
+	setmuxmode(0x48002166, 7, 5);	/* hsusb3_tll* in mode 5; is mode 4 */
 	setmuxmode(0x48002180, 1, 5);	/* hsusb3_tll_clk; is mode 4 */
 	setmuxmode(0x48002184, 4, 5);	/* hsusb3_tll_data?; is mode 1 */
-	setmuxmode(0x480021a2, 12, 0);	/* hsusb0 (console) */
-	setmuxmode(0x480021d4, 6, 2);	/* hsusb2_tll (ehci port 2); */
-					/* mode 3 is hsusb2 */
-	setmuxmode(0x480025d8, 18, 6);	/* hsusb[12]_tll; mode 3 is */
-					/* hsusb1_data, hsusb2 */
+	setmuxmode(0x480021a2, 12, 0);	/* hsusb0 (console) in mode 0 */
+	setmuxmode(0x480021d4, 6, 2);	/* hsusb2_tll* (ehci port 2) in mode 2 */
+					/* mode 3 is hsusb2_data* */
+	setmuxmode(0x480025d8, 18, 6);	/* hsusb[12]_tll*; mode 3 is */
+					/* hsusb1_data*, hsusb2* */
+
+	setmuxmode(0x480020e4, 2, 5);	/* uart3_rx_* in mode 5 */
+	setmuxmode(0x4800219a, 4, 0);	/* uart3_* in mode 0 */
+	/* uart3_* in mode 2; TODO: conflicts with hsusb0 */
+	setmuxmode(0x480021aa, 4, 2);
+	setmuxmode(0x48002240, 2, 3);	/* uart3_* in mode 3 */
 
 	/*
-	 * igep only: mode 4 of 21d2 is gpio_176 (smsc9221 ether irq).
+	 * igep/gumstix only: mode 4 of 21d2 is gpio_176 (smsc9221 ether irq).
 	 * see ether9221.c for more.
 	 */
 	*(ushort *)0x480021d2 = Inena | Ptup | Ptena | 4;
 
-	/* magic from u-boot */
+	/* magic from u-boot for flash */
 	*(ushort *)GpmcA1	= Indis | Ptup | Ptena | 0;
 	*(ushort *)GpmcA2	= Indis | Ptup | Ptena | 0;
 	*(ushort *)GpmcA3	= Indis | Ptup | Ptena | 0;
@@ -1242,6 +1296,7 @@ cpuidprint(void)
 	char name[64];
 
 	cputype2name(name, sizeof name);
+	delay(250);				/* let uart catch up */
 	iprint("cpu%d: %lldMHz ARM %s\n", m->machno, m->cpuhz / (1000*1000),
 		name);
 }
