@@ -174,6 +174,7 @@ WAVE('a')
 
 	BL	cacheuwbinv(SB)
 
+WAVE('n')
 	/* undo double map of 0, KZERO */
 	MOVW	$PADDR(L1+L1X(0)), R4		/* address of PTE for 0 */
 	MOVW	$0, R0
@@ -189,7 +190,6 @@ _ptudbl:
 	MCR	CpSC, 0, R0, C(CpTLB), C(CpTLBinvu), CpTLBinv
 	BARRIERS
 
-WAVE('n')
 WAVE(' ')
 	/* pass Mach to main and set up the stack */
 	MOVW	$(MACHADDR), R0			/* Mach */
@@ -713,6 +713,7 @@ TEXT splfhi(SB), $-4
 //	MOVW	R1, CPSR
 //	RET
 
+TEXT	tas(SB), $-4
 TEXT	_tas(SB), $-4
 	MOVW	R0,R1
 	MOVW	$1,R0
