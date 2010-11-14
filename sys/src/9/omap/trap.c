@@ -386,12 +386,24 @@ irq(Ureg* ureg)
 			handled++;
 		}
 	if(!handled) {
-		print("unknown interrupt: irq %d", irqno);
+		iprint("unexpected interrupt: irq %d", irqno);
+		switch (irqno) {
+		case 56:
+		case 57:
+			iprint(" (I⁲C)");
+			break;
+		case 83:
+		case 86:
+		case 94:
+			iprint(" (MMC)");
+			break;
+		}
+
 		if(irqno < nelem(vctl)) {
 			intcmask(irqno);
-			print(", now masked");
+			iprint(", now masked");
 		}
-		print("\n");
+		iprint("\n");
 	}
 	t = perfticks();
 	ninterrupt++;
@@ -477,6 +489,7 @@ trap(Ureg *ureg)
 	case PsrMirq:
 		ldrexvalid = 0;
 		clockintr = irq(ureg);
+		m->intr++;
 		break;
 	case PsrMabt:			/* prefetch fault */
 		ldrexvalid = 0;
