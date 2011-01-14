@@ -120,7 +120,10 @@ uintptr mmukunmap(uintptr, uintptr, usize);
 extern void* mmuuncache(void*, usize);
 extern void* ucalloc(usize);
 extern void* ucallocalign(usize size, int align, int span);
+extern Block* ucallocb(int);
 extern void ucfree(void*);
+extern void ucfreeb(Block*);
+extern Block* uciallocb(int);
 
 /*
  * Things called from port.

@@ -34,10 +34,10 @@
 #include	"../port/flashif.h"
 #include	"../port/nandecc.h"
 
-#define NANDFREG ((Nandreg*)AddrNandf)
-
 enum {
 	Debug		= 0,
+
+	Nopage		= ~0ul,		/* cache is empty */
 
 	/* vendors */
 	Hynix		= 0xad,
@@ -176,14 +176,18 @@ nandwriten(Flash *f, uchar *buf, long n)
 static void
 nandclaim(Flash*)
 {
-	NANDFREG->ctl |= NandActCEBoot;
+	Nandreg *nand = (Nandreg*)soc.nand;
+
+	nand->ctl |= NandActCEBoot;
 	coherence();
 }
 
 static void
 nandunclaim(Flash*)
 {
-	NANDFREG->ctl &= ~NandActCEBoot;
+	Nandreg *nand = (Nandreg*)soc.nand;
+
+	nand->ctl &= ~NandActCEBoot;
 	coherence();
 }
 
@@ -354,6 +358,9 @@ erasezone(Flash *f, Flashregion *r, ulong offset)
 	nandaddr(f, page>>8);
 	nandaddr(f, page>>16);
 	nandcmd(f, Erasestart);
+
+	/* invalidate cache on any erasure (slight overkill) */
+	cache.pageno = Nopage;
 
 	/* have to wait until flash is done.  typically ~2ms */
 	delay(1);
@@ -653,6 +660,7 @@ reset(Flash *f)
 	f->suspend = nil;
 	f->resume = nil;
 	f->sort = "nand";
+	cache.pageno = Nopage;
 	return idchip(f);
 }
 
