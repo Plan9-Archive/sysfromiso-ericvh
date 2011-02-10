@@ -153,25 +153,6 @@ Dev archdevtab = {
 char *
 cputype2name(char *buf, int size)
 {
-#ifdef TODO		/* identify the flavour of SoC & cpu */
-	char *soc;
-
-	m->cputype = *(ulong *)AddrDevid;
-	switch(m->cputype & 3) {
-	case 0:
-//		soc = "88F6180";
-		break;
-	case 1:
-//		soc = "88F619[02]";
-		break;
-	case 2:
-//		soc = "88F6281";
-		break;
-	default:
-		soc = "unknown";
-		break;
-	}
-#endif
 	seprint(buf, buf + size, "Cortex-A8");
 	return buf;
 }
@@ -182,8 +163,7 @@ cputyperead(Chan*, void *a, long n, vlong offset)
 	char name[64], str[128];
 
 	cputype2name(name, sizeof name);
-	snprint(str, sizeof str, "ARM %s %llud\n", name,
-		m->cpuhz / (1000*1000));
+	snprint(str, sizeof str, "ARM %s %llud\n", name, m->cpuhz / Mhz);
 	return readstr(offset, a, n, str);
 }
 
