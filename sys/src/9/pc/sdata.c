@@ -1929,7 +1929,6 @@ atapnp(void)
 		case (0x4D69<<16)|0x105A:	/* Promise Ultra/133 TX2 */
 		case (0x3373<<16)|0x105A:	/* Promise 20378 RAID */
 		case (0x3149<<16)|0x1106:	/* VIA VT8237 SATA/RAID */
-		case (0x4379<<16)|0x1002:	/* ATI 4379 SATA*/
 		case (0x3112<<16)|0x1095:	/* SiI 3112 SATA/RAID */
 			maxio = 15;
 			span = 8*1024;
@@ -2000,8 +1999,9 @@ atapnp(void)
 			 * address for the registers (0x50?).
 			 */
 			/*FALLTHROUGH*/
-		case (0x1002<<16)|0x4372:	/* ATI SB400 */
-		case (0x4376<<16)|0x1002:	/* ATI Radeon Xpress 200M */
+		case (0x4376<<16)|0x1002:	/* ATI SB400 PATA */
+		case (0x4379<<16)|0x1002:	/* ATI SB400 SATA */
+		case (0x437a<<16)|0x1002:	/* ATI SB400 SATA */
 			break;
 		case (0x0211<<16)|0x1166:	/* ServerWorks IB6566 */
 			{
@@ -2022,6 +2022,7 @@ atapnp(void)
 		case (0x5513<<16)|0x1039:	/* SiS 962 */
 		case (0x0646<<16)|0x1095:	/* CMD 646 */
 		case (0x0571<<16)|0x1106:	/* VIA 82C686 */
+		case (0x2363<<16)|0x197b:	/* JMicron SATA */
 		case (0x1230<<16)|0x8086:	/* 82371FB (PIIX) */
 		case (0x7010<<16)|0x8086:	/* 82371SB (PIIX3) */
 		case (0x7111<<16)|0x8086:	/* 82371[AE]B (PIIX4[E]) */
@@ -2035,6 +2036,7 @@ atapnp(void)
 		case (0x24CB<<16)|0x8086:	/* 82801DB (ICH4, High-End) */
 		case (0x24DB<<16)|0x8086:	/* 82801EB (ICH5) */
 		case (0x25A3<<16)|0x8086:	/* 6300ESB (E7210) */
+		case (0x2653<<16)|0x8086:	/* 82801FBM (ICH6M) */
 		case (0x266F<<16)|0x8086:	/* 82801FB (ICH6) */
 		case (0x27DF<<16)|0x8086:	/* 82801G SATA (ICH7) */
 		case (0x27C0<<16)|0x8086:	/* 82801GB SATA AHCI (ICH7) */

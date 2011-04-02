@@ -56,6 +56,8 @@ errtoolong(RR *rp, Scan *sp, int remain, int need, char *where)
 	/* hack to cope with servers that don't set Ftrunc when they should */
 	if (remain < Maxudp && need > Maxudp)
 		sp->trunc = 1;
+	if (debug)
+		dnslog("malformed rr: %R", rp);
 	return 0;
 }
 
@@ -301,16 +303,18 @@ err:
  * ms windows 2000 seems to get the bytes backward in the type field
  * of ptr records, so return a format error as feedback.
  */
-static void
-mstypehack(Scan *sp, int type, char *where)
+static ushort
+mstypehack(Scan *sp, ushort type, char *where)
 {
-	if ((uchar)type == 0 && (uchar)(type>>8) != 0) {
+	if ((uchar)type == 0 && (type>>8) != 0) {
 		USED(where);
 //		dnslog("%s: byte-swapped type field in ptr rr from win2k",
 //			where);
-		if (sp->rcode == 0)
+		if (sp->rcode == Rok)
 			sp->rcode = Rformat;
+		return (uchar)type << 8 | type >> 8;
 	}
+	return type;
 }
 
 /*
@@ -330,7 +334,7 @@ retry:
 	USHORT(type);
 	USHORT(class);
 
-	mstypehack(sp, type, "convM2RR");
+	type = mstypehack(sp, type, "convM2RR");
 	rp = rralloc(type);
 	rp->owner = dnlookup(dname, class, 1);
 	rp->type = type;
@@ -467,10 +471,8 @@ retry:
 		 * 235.9.104.135.in-addr.arpa cname
 		 *	235.9.104.135.in-addr.arpa from 135.104.9.235
 		 */
-		if (type == Tcname && sp->p - data == 2 && len == 0) {
-			// dnslog("convM2RR: got %R", rp);
+		if (type == Tcname && sp->p - data == 2 && len == 0)
 			return rp;
-		}
 		if (len > sp->p - data){
 			dnslog("bad %s RR len (%d bytes nominal, %lud actual): %R",
 				rrname(type, ptype, sizeof ptype), len,
@@ -499,7 +501,7 @@ convM2Q(Scan *sp)
 	if(sp->err || sp->rcode || sp->stop)
 		return nil;
 
-	mstypehack(sp, type, "convM2Q");
+	type = mstypehack(sp, type, "convM2Q");
 	rp = rralloc(type);
 	rp->owner = dnlookup(dname, class, 1);
 
@@ -521,6 +523,11 @@ rrloop(Scan *sp, char *what, int count, int quest)
 		if(rp == nil)
 			break;
 		setmalloctag(rp, getcallerpc(&sp));
+		/*
+		 * it might be better to ignore the bad rr, possibly break out,
+		 * but return the previous rrs, if any.  that way our callers
+		 * would know that they had got a response, however ill-formed.
+		 */
 		if(sp->err || sp->rcode || sp->stop){
 			rrfree(rp);
 			break;
@@ -547,7 +554,7 @@ convM2DNS(uchar *buf, int len, DNSmsg *m, int *codep)
 	Scan *sp;
 
 	if (codep)
-		*codep = 0;
+		*codep = Rok;
 	assert(len >= 0);
 	sp = &scan;
 	memset(sp, 0, sizeof *sp);
@@ -575,7 +582,7 @@ convM2DNS(uchar *buf, int len, DNSmsg *m, int *codep)
 	if (sp->trunc)
 		m->flags |= Ftrunc;
 	if (sp->stop)
-		sp->rcode = 0;
+		sp->rcode = Rok;
 	if (codep)
 		*codep = sp->rcode;
 	return err;
