@@ -188,7 +188,7 @@ restart:
 		// dnslog("read received UDP from %I to %I",
 		//	((Udphdr*)buf)->raddr, ((Udphdr*)buf)->laddr);
 		getactivity(&req, 0);
-		req.aborttime = now + Maxreqtm;
+		req.aborttime = timems() + Maxreqtm;
 //		req.from = smprint("%I", ((Udphdr*)buf)->raddr);
 		req.from = smprint("%I", buf);
 		rcode = 0;
@@ -238,7 +238,7 @@ restart:
 					uh->rport[1], reqmsg.id,
 					reqmsg.qd->owner->name,
 					rrname(reqmsg.qd->type, tname,
-					sizeof tname));	// DEBUG
+					sizeof tname));
 		}
 		/* loop through each question */
 		while(reqmsg.qd){
